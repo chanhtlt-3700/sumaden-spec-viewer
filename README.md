@@ -86,19 +86,42 @@ Ngoài chu kỳ, nó còn kiểm tra khi tab được focus lại — mở máy 
 
 ### Quyền truy cập
 
-**Chạy trên máy thì không cần token.** `npm run dev` và `npm run preview` đều bật proxy nội bộ, server
-tự ký request bằng `gh auth` của bạn — trình duyệt không thấy credential nào.
+**Có máy chủ thì không ai cần token.** Server ký request bằng credential của chính nó, trình duyệt
+không bao giờ thấy credential nào.
 
-| Tình huống | Kênh | Cần token? |
+| Cách chạy | Kênh | Cần token? |
 |---|---|---|
-| `npm run dev` | Server nội bộ ký bằng `gh auth` | Không |
-| `npm run preview` | Server nội bộ ký bằng `gh auth` | Không |
-| `dist/` deploy lên web, chỉ xem | Đọc snapshot kèm trong `dist/` | Không |
-| `dist/` deploy lên web, muốn tự cập nhật | Gọi thẳng api.github.com | Có (scope `repo: read`) |
+| `npm run dev` | Máy chủ ký hộ | Không |
+| `npm run preview` | Máy chủ ký hộ | Không |
+| `npm run serve` (deploy) | Máy chủ ký hộ | Không |
+| Host tĩnh thuần, chỉ xem | Snapshot kèm trong `dist/` | Không |
+| Host tĩnh thuần, muốn tự cập nhật | Gọi thẳng api.github.com | Có (scope `repo: read`) |
 
-Token chỉ nằm trong `localStorage` của trình duyệt đó và chỉ gửi tới `api.github.com`. Proxy nội bộ
-(`scripts/gh-proxy-plugin.mjs`) chỉ forward path thuộc đúng repo đã cấu hình nên không phải relay mở,
-và `preview` thì chặn luôn `resync` — phục vụ một bản build thì không được phép ghi đè bản build đó.
+Chỉ dòng cuối mới cần token, và đó là **giới hạn của GitHub chứ không phải của app**: với repo
+private, một trang tĩnh thuần không có cách nào tự xin quyền trong trình duyệt.
+
+- OAuth web flow: bảng tham số của endpoint đổi code lấy token ghi `client_secret` là **Required**.
+  Secret không thể nhét vào bundle tĩnh. PKCE có hỗ trợ nhưng không thay thế được secret.
+- Device flow: không cần secret, nhưng `github.com/login/device/code` **không trả header CORS** nào
+  (kiểm chứng: `api.github.com` trả `Access-Control-Allow-Origin: *`, endpoint device thì không),
+  nên trình duyệt không gọi được.
+
+Vì vậy cách bỏ token hoàn toàn là dùng `npm run serve` thay cho host tĩnh — xem mục dưới.
+
+Proxy (`shared/gh-proxy.mjs`) chỉ forward path thuộc đúng repo đã cấu hình nên không phải relay mở.
+`preview` và `serve` chặn sẵn `resync` (phục vụ một bản build thì không được ghi đè bản build đó);
+bật lại bằng `SPEC_ALLOW_SYNC=1` nếu muốn.
+
+### Deploy cho cả team — `npm run serve`
+
+```bash
+npm run build
+npm run serve            # PORT=5190, HOST=0.0.0.0
+```
+
+Một server Node thuần, không thêm dependency: phục vụ `dist/` và mở `/__gh/*` đã ký sẵn bằng
+`GITHUB_TOKEN` (hoặc `gh auth token`) phía máy chủ. Người xem **không cần token, không cần tài khoản
+GitHub, không cần quyền vào repo** — vẫn có đủ real-time.
 
 ### Ảnh mockup
 
@@ -167,6 +190,8 @@ Ngoài ra panel trạng thái có nút **“Kiểm tra ngay”** nếu không mu
 ```
 shared/spec-parser.mjs   parser markdown dùng chung cho Node và browser
 shared/gh-node.mjs       token + fetch GitHub phía Node
+shared/gh-proxy.mjs      handler /__gh/* dùng chung cho dev, preview và serve
+scripts/serve.mjs        server đứng riêng cho bản deploy (dist + proxy)
 scripts/sync-specs.mjs   tải + parse -> JSON snapshot
 scripts/gh-proxy-plugin.mjs   dev proxy /__gh/* (ký bằng gh auth) + /__gh/resync
 src/lib/data.ts          store có subscribe, cache, localStorage

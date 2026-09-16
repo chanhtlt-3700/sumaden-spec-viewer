@@ -109,7 +109,7 @@ function LivePanel() {
         <span>Kênh</span>
         <strong>
           {state.channel === 'proxy'
-            ? 'Server nội bộ (gh auth)'
+            ? 'Qua máy chủ (không cần token)'
             : state.channel === 'token'
               ? 'Token cá nhân'
               : 'Chưa cấu hình'}
