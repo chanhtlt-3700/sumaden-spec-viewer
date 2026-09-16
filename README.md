@@ -86,13 +86,19 @@ Ngoài chu kỳ, nó còn kiểm tra khi tab được focus lại — mở máy 
 
 ### Quyền truy cập
 
-| Tình huống | Kênh | Cần gì |
-|---|---|---|
-| `npm run dev` | Dev server ký hộ bằng `gh auth` | Không cần gì thêm |
-| `dist/` deploy tĩnh | Gọi thẳng api.github.com | Dán GitHub token (scope `repo: read`) vào panel |
+**Chạy trên máy thì không cần token.** `npm run dev` và `npm run preview` đều bật proxy nội bộ, server
+tự ký request bằng `gh auth` của bạn — trình duyệt không thấy credential nào.
 
-Token chỉ nằm trong `localStorage` của trình duyệt đó và chỉ gửi tới `api.github.com`. Dev proxy
-(`scripts/gh-proxy-plugin.mjs`) chỉ forward các path thuộc đúng repo đã cấu hình, không phải relay mở.
+| Tình huống | Kênh | Cần token? |
+|---|---|---|
+| `npm run dev` | Server nội bộ ký bằng `gh auth` | Không |
+| `npm run preview` | Server nội bộ ký bằng `gh auth` | Không |
+| `dist/` deploy lên web, chỉ xem | Đọc snapshot kèm trong `dist/` | Không |
+| `dist/` deploy lên web, muốn tự cập nhật | Gọi thẳng api.github.com | Có (scope `repo: read`) |
+
+Token chỉ nằm trong `localStorage` của trình duyệt đó và chỉ gửi tới `api.github.com`. Proxy nội bộ
+(`scripts/gh-proxy-plugin.mjs`) chỉ forward path thuộc đúng repo đã cấu hình nên không phải relay mở,
+và `preview` thì chặn luôn `resync` — phục vụ một bản build thì không được phép ghi đè bản build đó.
 
 ### Ảnh mockup
 

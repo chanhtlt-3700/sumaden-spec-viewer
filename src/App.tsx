@@ -5,7 +5,7 @@ import { onLiveChange, start as startLive } from './lib/live';
 import type { ChangeReport } from './lib/live';
 import { pruneOrphanLayouts } from './lib/storage';
 import { Empty, Spinner } from './components/ui';
-import { Bootstrap } from './components/Bootstrap';
+import { Bootstrap, clearReloadGuard } from './components/Bootstrap';
 import { Sidebar } from './components/Sidebar';
 import { CommandPalette } from './components/CommandPalette';
 import { LiveStatus } from './components/LiveStatus';
@@ -45,6 +45,8 @@ function Shell() {
   useEffect(() => {
     if (!slugKey) return;
     pruneOrphanLayouts(new Set(slugKey.split(',')));
+    // Data loaded fine, so a future cold start may use the reload path again.
+    clearReloadGuard();
   }, [slugKey]);
 
   useEffect(() => {

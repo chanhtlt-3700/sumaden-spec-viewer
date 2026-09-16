@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dropdown } from './ui';
 import { useLive } from '../lib/live';
 import * as live from '../lib/live';
-import { readToken, resetChannel, verifyToken, writeToken } from '../lib/github';
+import { canServerSync, readToken, resetChannel, verifyToken, writeToken } from '../lib/github';
 import { clearViewCache, viewCacheSize } from '../lib/storage';
 
 const INTERVALS = [
@@ -109,7 +109,7 @@ function LivePanel() {
         <span>Kênh</span>
         <strong>
           {state.channel === 'proxy'
-            ? 'Dev server (gh auth)'
+            ? 'Server nội bộ (gh auth)'
             : state.channel === 'token'
               ? 'Token cá nhân'
               : 'Chưa cấu hình'}
@@ -184,7 +184,7 @@ function LivePanel() {
         >
           Kiểm tra ngay
         </button>
-        {state.channel === 'proxy' && (
+        {state.channel === 'proxy' && canServerSync() && (
           <button
             type="button"
             className="chip"

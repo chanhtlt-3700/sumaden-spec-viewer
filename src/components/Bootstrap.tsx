@@ -4,6 +4,7 @@ import type { BootstrapProgress } from '../lib/bootstrap';
 import { DEFAULT_REF } from '../lib/config';
 import { seedStore } from '../lib/data';
 import {
+  canServerSync,
   detectChannel,
   proxyRepo,
   readToken,
@@ -15,6 +16,17 @@ import {
 import type { Channel } from '../lib/github';
 
 type Phase = 'probing' | 'needs-token' | 'working' | 'error';
+
+/** Set once we have reloaded to pick up a server-side sync, so we never loop. */
+const RELOAD_GUARD = 'spec-view:bootstrap-reloaded';
+
+export function clearReloadGuard() {
+  try {
+    sessionStorage.removeItem(RELOAD_GUARD);
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Shown when there is no snapshot at all — no `public/data`, nothing cached.
@@ -38,10 +50,13 @@ export function Bootstrap({ onReady }: { onReady: () => void }) {
       setPhase('working');
       setError('');
       try {
-        if (mode === 'proxy') {
+        // The server sync writes public/data, so a reload picks up the real
+        // snapshot — but only try that once. If we land back here afterwards the
+        // snapshot is still unreadable, and reloading again would loop forever.
+        if (mode === 'proxy' && canServerSync() && !sessionStorage.getItem(RELOAD_GUARD)) {
           setProgress({ done: 0, total: 0, label: 'Dev server đang tải spec và ảnh mockup…' });
           await requestResync(true);
-          // The sync wrote public/data; reload so the app reads the real snapshot.
+          sessionStorage.setItem(RELOAD_GUARD, '1');
           window.location.reload();
           return;
         }

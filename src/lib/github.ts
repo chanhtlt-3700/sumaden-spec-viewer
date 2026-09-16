@@ -35,6 +35,8 @@ export interface ChangedFile {
 
 let channel: Channel | null = null;
 let proxyInfo: RepoRef | null = null;
+/** `vite preview` proxies GitHub but refuses to rewrite the build it serves. */
+let proxyCanSync = false;
 
 export const readToken = () => {
   try {
@@ -63,6 +65,7 @@ export async function detectChannel(): Promise<Channel> {
       const info = await res.json();
       if (info.ok) {
         proxyInfo = { repo: info.repo, branch: info.branch, specPath: info.specPath };
+        proxyCanSync = info.canSync !== false;
         channel = 'proxy';
         return channel;
       }
@@ -75,10 +78,12 @@ export async function detectChannel(): Promise<Channel> {
 }
 
 export const proxyRepo = () => proxyInfo;
+export const canServerSync = () => proxyCanSync;
 
 export const resetChannel = () => {
   channel = null;
   proxyInfo = null;
+  proxyCanSync = false;
 };
 
 class GithubError extends Error {
