@@ -1781,3 +1781,64 @@ td:hover .cell-more {
   font-size: 12px;
   background: var(--bg-3);
 }
+
+/* ------------------------------------------------------------- bootstrap */
+
+.bootstrap {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 40px 20px;
+}
+.bootstrap-card {
+  width: min(560px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 26px 28px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 12px;
+}
+.bootstrap-card h1 {
+  margin: 0;
+  font-size: 19px;
+}
+.bootstrap-card p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.bootstrap-card .page-sub {
+  margin-top: -6px;
+}
+.bootstrap-card code {
+  background: var(--bg-3);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.progress {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+.progress-bar.is-indeterminate {
+  width: 35%;
+  animation: progress-slide 1.2s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}

@@ -113,9 +113,16 @@ function repoRef(): RepoRef | null {
 }
 
 export async function start() {
-  const index = await loadIndex();
   const channel = await detectChannel();
-  set({ channel, head: index.head, status: state.enabled && channel !== 'none' ? 'idle' : 'off' });
+  let head: Commit | null = null;
+  try {
+    head = (await loadIndex()).head;
+  } catch {
+    // Cold start: the bootstrap screen owns this case and calls start() again.
+    set({ channel, status: 'off' });
+    return;
+  }
+  set({ channel, head, status: state.enabled && channel !== 'none' ? 'idle' : 'off' });
   schedule();
   if (state.enabled && channel !== 'none') void check();
 }

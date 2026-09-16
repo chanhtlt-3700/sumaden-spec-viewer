@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Link, Route, Routes } from 'react-router-dom';
-import { useIndex, useStored } from './lib/data';
+import { NoSnapshotError, useIndex, useStored } from './lib/data';
 import { onLiveChange, start as startLive } from './lib/live';
 import type { ChangeReport } from './lib/live';
 import { pruneOrphanLayouts } from './lib/storage';
 import { Empty, Spinner } from './components/ui';
+import { Bootstrap } from './components/Bootstrap';
 import { Sidebar } from './components/Sidebar';
 import { CommandPalette } from './components/CommandPalette';
 import { LiveStatus } from './components/LiveStatus';
@@ -62,13 +63,12 @@ function Shell() {
   }, []);
 
   if (state.status === 'loading') return <Spinner label="Đang nạp danh sách spec…" />;
-  if (state.status === 'error')
-    return (
-      <Empty
-        title="Không đọc được dữ liệu spec"
-        hint={`${state.error.message} — hãy chạy "npm run sync" để tải spec từ GitHub.`}
-      />
-    );
+  if (state.status === 'error') {
+    // Nothing on disk and nothing cached: fetch it instead of sending the user to a script.
+    if (state.error instanceof NoSnapshotError)
+      return <Bootstrap onReady={() => void startLive()} />;
+    return <Empty title="Không đọc được dữ liệu spec" hint={state.error.message} />;
+  }
 
   const index: SpecIndex = state.data;
 

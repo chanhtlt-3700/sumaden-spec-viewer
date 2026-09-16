@@ -10,12 +10,12 @@ tự phát hiện commit mới trên GitHub rồi vá lại đúng những spec 
 
 ```bash
 npm install
-npm run sync     # tải spec + ảnh mockup từ GitHub (cần quyền đọc repo)
 npm run dev      # mở http://localhost:5180
 ```
 
-`npm run sync` lấy token theo thứ tự: biến môi trường `GITHUB_TOKEN`, sau đó `gh auth token`
-(cần `gh auth login` trước). Repo là private nên bước này bắt buộc.
+Lần đầu chưa có dữ liệu, app **tự tải spec về** rồi vào thẳng — không phải chạy lệnh nào trước.
+Chỉ cần đã `gh auth login` (repo là private). Muốn tải sẵn từ dòng lệnh thì vẫn có
+`npm run sync`, nó lấy token theo thứ tự `GITHUB_TOKEN` rồi `gh auth token`.
 
 Build bản tĩnh để chia sẻ nội bộ:
 
@@ -26,6 +26,19 @@ npm run preview
 
 `dist/` dùng hash routing và đường dẫn tương đối nên copy vào bất kỳ thư mục nào trên web server
 đều chạy được.
+
+## Lần chạy đầu
+
+Không có `public/data` thì app không báo lỗi mà tự lo liệu:
+
+| Tình huống | App làm gì |
+|---|---|
+| Đang chạy `npm run dev` | Nhờ dev server chạy `npm run sync` (kèm ảnh) rồi tự reload — không hỏi gì |
+| Mở bản `dist/` tĩnh | Xin GitHub token một lần, rồi **tự dựng snapshot ngay trong trình duyệt** |
+
+Bản dựng trong trình duyệt dùng chung parser với script sync, được lưu vào **IndexedDB** nên lần mở
+sau không tải lại (đo thực tế: 67 request GitHub lần đầu, 1 request ở lần reload). Ảnh mockup không
+có sẵn trên máy thì tải thẳng blob từ GitHub, nên bản tĩnh vẫn xem được đầy đủ.
 
 ## Đồng bộ dữ liệu
 

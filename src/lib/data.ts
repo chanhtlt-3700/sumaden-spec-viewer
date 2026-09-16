@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Commit, Spec, SpecIndex, TableBlock } from '../types';
 import { sortSpecs, summarize } from '../../shared/spec-parser.mjs';
+import { readSnapshot, writeSnapshot } from './idb';
 
 const BASE = import.meta.env.BASE_URL || './';
 
@@ -17,6 +18,8 @@ async function getJson<T>(path: string): Promise<T> {
 const specCache = new Map<string, Spec>();
 let indexData: SpecIndex | null = null;
 let indexPromise: Promise<SpecIndex> | null = null;
+/** True when the data came from the browser itself, not from public/data. */
+let browserSnapshot = false;
 
 let version = 0;
 const listeners = new Set<() => void>();
@@ -24,6 +27,23 @@ const listeners = new Set<() => void>();
 function emit() {
   version += 1;
   for (const fn of listeners) fn();
+  if (browserSnapshot) schedulePersist();
+}
+
+let persistTimer = 0;
+function schedulePersist() {
+  window.clearTimeout(persistTimer);
+  persistTimer = window.setTimeout(() => {
+    if (indexData) void writeSnapshot(indexData, [...specCache.values()]);
+  }, 1500);
+}
+
+/** No snapshot on disk and none cached — the app has to fetch one itself. */
+export class NoSnapshotError extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = 'NoSnapshotError';
+  }
 }
 
 function subscribe(fn: () => void) {
@@ -36,22 +56,58 @@ function subscribe(fn: () => void) {
 /** Re-renders anything reading store data when live mode patches it. */
 export const useStoreVersion = () => useSyncExternalStore(subscribe, () => version);
 
+/**
+ * Prefer the static snapshot in public/data; fall back to one this browser
+ * built earlier and cached. Throws NoSnapshotError when there is neither, so
+ * the shell can offer to fetch the data instead of showing a dead end.
+ */
 export function loadIndex(): Promise<SpecIndex> {
   if (indexData) return Promise.resolve(indexData);
   if (!indexPromise) {
-    indexPromise = getJson<SpecIndex>('data/index.json').then((data) => {
-      indexData = data;
-      return data;
+    indexPromise = (async () => {
+      try {
+        const data = await getJson<SpecIndex>('data/index.json');
+        indexData = data;
+        browserSnapshot = false;
+        return data;
+      } catch (staticError) {
+        const cached = await readSnapshot();
+        if (cached) {
+          seedStore(cached.index, cached.specs, { fromBrowser: true });
+          return cached.index;
+        }
+        throw new NoSnapshotError(
+          staticError instanceof Error ? staticError.message : String(staticError)
+        );
+      }
+    })();
+    // A failed attempt must not be cached, or a retry can never succeed.
+    indexPromise.catch(() => {
+      indexPromise = null;
     });
   }
   return indexPromise;
 }
 
+/** Install a snapshot held in memory (cold-start bootstrap or IndexedDB). */
+export function seedStore(index: SpecIndex, specs: Spec[], opts = { fromBrowser: true }) {
+  indexData = index;
+  browserSnapshot = opts.fromBrowser;
+  specCache.clear();
+  for (const spec of specs) specCache.set(spec.slug, spec);
+  indexPromise = Promise.resolve(index);
+  version += 1;
+  for (const fn of listeners) fn();
+}
+
 export const currentIndex = () => indexData;
+export const isBrowserSnapshot = () => browserSnapshot;
 
 export async function loadSpec(slug: string): Promise<Spec> {
   const hit = specCache.get(slug);
   if (hit) return hit;
+  // A browser-built snapshot holds every spec already; nothing to fetch.
+  if (browserSnapshot) throw new Error(`Không có spec "${slug}" trong dữ liệu đã tải`);
   const spec = await getJson<Spec>(`data/specs/${slug}.json`);
   specCache.set(slug, spec);
   return spec;
