@@ -13,11 +13,16 @@ import {
 import { Check, Dropdown, Segmented, useDismiss, useToast } from './ui';
 import { Markdown } from './Markdown';
 
-type Density = 'compact' | 'cozy' | 'full';
+type Density = 'auto' | 'compact' | 'cozy' | 'full';
 type SortDir = 'asc' | 'desc';
 type ColFilter = { text: string; values: string[] | null };
 
-const DENSITY_ROWS: Record<Density, number> = { compact: 30, cozy: 92, full: 0 };
+/** Max cell height in px; 0 means no clipping at all. */
+const DENSITY_ROWS: Record<Exclude<Density, 'auto'>, number> = {
+  compact: 30,
+  cozy: 92,
+  full: 0,
+};
 
 /** Column presets for the 20-column "Items" layout these specs share. */
 const PRESETS: { id: string; label: string; columns: string[] }[] = [
@@ -54,6 +59,8 @@ const PRESETS: { id: string; label: string; columns: string[] }[] = [
 ];
 
 const NARROW = /^(no|required|data type|format|item type|min-|max-|default)/i;
+/** Prose columns — these carry the bulk of a spec and are never truncated. */
+const PROSE = /(description|note|mô tả|ghi chú)/i;
 
 function defaultWidth(header: string, samples: string[]): number {
   if (/^no$/i.test(header)) return 62;
@@ -62,7 +69,8 @@ function defaultWidth(header: string, samples: string[]): number {
     : 0;
   const longest = samples.reduce((a, s) => Math.max(a, s.split('\n')[0].length), 0);
   const est = 26 + Math.max(header.length * 7.6, Math.min(avg * 6.2, longest * 5.5));
-  const cap = NARROW.test(header) ? 150 : 400;
+  // Prose gets more width so full rows stay a readable shape instead of a column of text.
+  const cap = NARROW.test(header) ? 150 : PROSE.test(header) ? 560 : 400;
   return Math.round(Math.max(96, Math.min(est, cap)));
 }
 
@@ -98,7 +106,7 @@ export function SheetTable({
 
   const [widths, setWidths] = useStored<number[]>(`${storageKey}:widths`, initialWidths);
   const [hidden, setHidden] = useStored<string[]>(`${storageKey}:hidden`, []);
-  const [density, setDensity] = useStored<Density>('sheet:density', 'cozy');
+  const [density, setDensity] = useStored<Density>('sheet:density', 'auto');
   const [freeze, setFreeze] = useStored<number>('sheet:freeze', 2);
   const [hideEmpty, setHideEmpty] = useStored<boolean>('sheet:hideEmpty', false);
 
@@ -331,7 +339,11 @@ export function SheetTable({
     Object.values(filters).filter((f) => f.text.trim() || (f.values && f.values.length)).length +
     (hideEmpty ? 1 : 0);
 
-  const rowHeight = DENSITY_ROWS[density];
+  // A table carrying Description/Note is mostly prose: clipping it hides the spec
+  // itself, so "auto" lets those rows run to full height.
+  const hasProse = useMemo(() => headers.some((h) => PROSE.test(h)), [headers]);
+  const effectiveDensity = density === 'auto' ? (hasProse ? 'full' : 'cozy') : density;
+  const rowHeight = DENSITY_ROWS[effectiveDensity];
 
   const grid = (
     <div
@@ -409,6 +421,11 @@ export function SheetTable({
           onChange={setDensity}
           title="Chiều cao dòng"
           options={[
+            {
+              value: 'auto',
+              label: 'A',
+              title: 'Tự động — bảng có cột Description/Note hiện đủ dòng, bảng khác rút gọn',
+            },
             { value: 'compact', label: '≡', title: 'Gọn — 1 dòng' },
             { value: 'cozy', label: '☰', title: 'Vừa — tối đa 4 dòng' },
             { value: 'full', label: '▤', title: 'Đầy đủ — hiện hết nội dung' },
@@ -507,7 +524,7 @@ export function SheetTable({
         </button>
       </div>
 
-      <div className={`sheet-scroll density-${density}`} ref={scrollRef}>
+      <div className={`sheet-scroll density-${effectiveDensity}`} ref={scrollRef}>
         <table style={{ width: totalWidth }}>
           <colgroup>
             <col style={{ width: 46 }} />

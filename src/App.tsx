@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { HashRouter, Link, Route, Routes } from 'react-router-dom';
 import { useIndex, useStored } from './lib/data';
+import { onLiveChange, start as startLive } from './lib/live';
+import type { ChangeReport } from './lib/live';
+import { pruneOrphanLayouts } from './lib/storage';
 import { Empty, Spinner } from './components/ui';
 import { Sidebar } from './components/Sidebar';
 import { CommandPalette } from './components/CommandPalette';
+import { LiveStatus } from './components/LiveStatus';
 import { HomePage } from './pages/HomePage';
 import { SpecPage } from './pages/SpecPage';
 import type { SpecIndex } from './types';
@@ -23,10 +27,24 @@ function Shell() {
   const [theme, setTheme] = useStored<Theme>('theme', 'dark');
   const [collapsed, setCollapsed] = useStored<boolean>('sidebar:collapsed', false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [update, setUpdate] = useState<ChangeReport | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  // Start watching GitHub once, and surface each incoming change.
+  useEffect(() => {
+    void startLive();
+    return onLiveChange(setUpdate);
+  }, []);
+
+  // Specs come and go upstream; their saved table layouts should not outlive them.
+  const slugKey = state.data?.specs.map((s) => s.slug).join(',') ?? '';
+  useEffect(() => {
+    if (!slugKey) return;
+    pruneOrphanLayouts(new Set(slugKey.split(',')));
+  }, [slugKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -71,9 +89,10 @@ function Shell() {
         </button>
 
         <div className="topbar-actions">
-          <span className="sync-time" title={`Đồng bộ lúc ${index.generatedAt}`}>
+          <span className="sync-time" title={`Snapshot dựng lúc ${index.generatedAt}`}>
             {index.specs.length} spec · {index.branch}
           </span>
+          <LiveStatus />
           <button
             type="button"
             className="btn"
@@ -103,11 +122,38 @@ function Shell() {
         </main>
       </div>
 
+      {update && <UpdateBanner report={update} onClose={() => setUpdate(null)} />}
+
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         specs={index.specs}
       />
+    </div>
+  );
+}
+
+function UpdateBanner({ report, onClose }: { report: ChangeReport; onClose: () => void }) {
+  const names = [...report.updated, ...report.removed.map((n) => `${n} (xoá)`)];
+  return (
+    <div className="update-banner" role="status">
+      <span className="update-dot" />
+      <div>
+        <strong>Spec vừa được cập nhật trên GitHub</strong>
+        <span className="update-detail">
+          {names.length ? names.join(', ') : 'Không có thay đổi nội dung'}
+          {report.imagesChanged > 0 && ` · ${report.imagesChanged} ảnh mockup đổi`}
+        </span>
+        <span className="update-commit">
+          {report.commit.message} — {report.commit.author}
+        </span>
+        {report.imagesChanged > 0 && (
+          <span className="update-hint">Chạy “Đồng bộ toàn bộ + ảnh” để lấy ảnh mới</span>
+        )}
+      </div>
+      <button type="button" className="btn" onClick={onClose}>
+        ✕
+      </button>
     </div>
   );
 }

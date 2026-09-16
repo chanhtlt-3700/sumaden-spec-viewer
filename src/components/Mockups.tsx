@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import type { SpecImage } from '../types';
+import type { SpecImage as SpecImageRef } from '../types';
 import { asset } from '../lib/data';
+import { SpecImage } from './SpecImage';
 
-const kindOf = (img: SpecImage) => {
+const kindOf = (img: SpecImageRef) => {
   const hay = `${img.alt} ${img.url}`.toLowerCase();
   if (hay.includes('annotated')) return 'Annotated';
   if (hay.includes('clean')) return 'Clean';
   return '';
 };
 
-export function Mockups({ images }: { images: SpecImage[] }) {
+export function Mockups({ images }: { images: SpecImageRef[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
 
@@ -35,7 +36,7 @@ export function Mockups({ images }: { images: SpecImage[] }) {
         {images.map((img, i) => (
           <figure key={`${img.url}-${i}`} className="mockup">
             <button type="button" onClick={() => setOpen(i)} title="Phóng to">
-              <img src={asset(img.url)} alt={img.alt || `Mockup ${i + 1}`} loading="lazy" />
+              <SpecImage url={img.url} alt={img.alt || `Mockup ${i + 1}`} loading="lazy" />
             </button>
             <figcaption>
               {kindOf(img) && <span className="badge">{kindOf(img)}</span>}
@@ -77,15 +78,19 @@ export function Mockups({ images }: { images: SpecImage[] }) {
             >
               ‹
             </button>
-            <img
-              src={asset(images[open].url)}
-              alt={images[open].alt}
-              style={{ width: `${zoom * 100}%` }}
+            <span
+              className="lightbox-img"
               onWheel={(e) => {
                 if (!e.ctrlKey) return;
                 setZoom((z) => Math.max(0.25, Math.min(5, z - Math.sign(e.deltaY) * 0.15)));
               }}
-            />
+            >
+              <SpecImage
+                url={images[open].url}
+                alt={images[open].alt}
+                style={{ width: `${zoom * 100}%` }}
+              />
+            </span>
             <button
               type="button"
               className="lightbox-nav next"

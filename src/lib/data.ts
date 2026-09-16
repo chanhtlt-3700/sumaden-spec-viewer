@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Spec, SpecIndex, TableBlock } from '../types';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { Commit, Spec, SpecIndex, TableBlock } from '../types';
+import { sortSpecs, summarize } from '../../shared/spec-parser.mjs';
 
 const BASE = import.meta.env.BASE_URL || './';
 
@@ -11,15 +12,42 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/* ---------------------------------------------------------------- caching */
+/* ------------------------------------------------------------------ store */
 
 const specCache = new Map<string, Spec>();
+let indexData: SpecIndex | null = null;
 let indexPromise: Promise<SpecIndex> | null = null;
 
+let version = 0;
+const listeners = new Set<() => void>();
+
+function emit() {
+  version += 1;
+  for (const fn of listeners) fn();
+}
+
+function subscribe(fn: () => void) {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+/** Re-renders anything reading store data when live mode patches it. */
+export const useStoreVersion = () => useSyncExternalStore(subscribe, () => version);
+
 export function loadIndex(): Promise<SpecIndex> {
-  if (!indexPromise) indexPromise = getJson<SpecIndex>('data/index.json');
+  if (indexData) return Promise.resolve(indexData);
+  if (!indexPromise) {
+    indexPromise = getJson<SpecIndex>('data/index.json').then((data) => {
+      indexData = data;
+      return data;
+    });
+  }
   return indexPromise;
 }
+
+export const currentIndex = () => indexData;
 
 export async function loadSpec(slug: string): Promise<Spec> {
   const hit = specCache.get(slug);
@@ -48,6 +76,38 @@ export async function loadAllSpecs(onProgress?: (done: number, total: number) =>
 
 export const getCachedSpec = (slug: string) => specCache.get(slug);
 
+/* ------------------------------------------------------------- mutations */
+
+/** Insert or replace a spec (live mode). Keeps index.specs sorted. */
+export function upsertSpec(spec: Spec) {
+  specCache.set(spec.slug, spec);
+  if (indexData) {
+    const summary = summarize(spec);
+    const rest = indexData.specs.filter((s) => s.slug !== spec.slug);
+    indexData = { ...indexData, specs: sortSpecs([...rest, summary]) };
+  }
+  emit();
+}
+
+export function removeSpec(slug: string) {
+  specCache.delete(slug);
+  if (indexData) {
+    indexData = { ...indexData, specs: indexData.specs.filter((s) => s.slug !== slug) };
+  }
+  emit();
+}
+
+export function setHead(head: Commit | null) {
+  if (!indexData) return;
+  indexData = { ...indexData, head };
+  emit();
+}
+
+export const findByFileName = (fileName: string) =>
+  indexData?.specs.find((s) => s.fileName === fileName) ?? null;
+
+export const knownSlugs = () => new Set(indexData?.specs.map((s) => s.slug) ?? []);
+
 /* ------------------------------------------------------------------ hooks */
 
 export type AsyncState<T> =
@@ -55,14 +115,27 @@ export type AsyncState<T> =
   | { status: 'ready'; data: T; error: null }
   | { status: 'error'; data: null; error: Error };
 
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T> {
+/**
+ * `resetOn` marks a change of identity (a different spec): the state drops back
+ * to loading. A bare `deps` change — a live-mode refresh — keeps the old data
+ * on screen until the new data arrives, so updates don't flash a spinner.
+ */
+export function useAsync<T>(
+  fn: () => Promise<T>,
+  deps: unknown[],
+  resetOn: string
+): AsyncState<T> {
   const [state, setState] = useState<AsyncState<T>>({ status: 'loading', data: null, error: null });
+  const identity = useRef(resetOn);
+  if (identity.current !== resetOn) {
+    identity.current = resetOn;
+    setState({ status: 'loading', data: null, error: null });
+  }
   const fnRef = useRef(fn);
   fnRef.current = fn;
 
   useEffect(() => {
     let alive = true;
-    setState({ status: 'loading', data: null, error: null });
     fnRef
       .current()
       .then((data) => alive && setState({ status: 'ready', data, error: null }))
@@ -76,8 +149,15 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): AsyncState<T
   return state;
 }
 
-export const useIndex = () => useAsync(() => loadIndex(), []);
-export const useSpec = (slug: string) => useAsync(() => loadSpec(slug), [slug]);
+export function useIndex() {
+  const v = useStoreVersion();
+  return useAsync(() => loadIndex(), [v], 'index');
+}
+
+export function useSpec(slug: string) {
+  const v = useStoreVersion();
+  return useAsync(() => loadSpec(slug), [slug, v], slug);
+}
 
 /* ------------------------------------------------------------ persistence */
 

@@ -62,10 +62,19 @@ export interface Spec extends SpecSummary {
   mockups: SpecImage[];
 }
 
+export interface Commit {
+  sha: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
 export interface SpecIndex {
   repo: string;
   branch: string;
   specPath: string;
   generatedAt: string;
+  /** Commit the static snapshot was built from; live mode diffs against it. */
+  head: Commit | null;
   specs: SpecSummary[];
 }
